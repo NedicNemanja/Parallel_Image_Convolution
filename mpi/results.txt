@@ -1,0 +1,8 @@
+When using the original size document:
+1 process: 12.060312
+2 processes: 6.446911
+4 processes: 6.501472
+8 processes: 6.459059
+Although we get a big speedup when we make the program run with more than one process,
+further increase in the number of processes does not help.
+The overhead time gets too big, thus the program is not highly scalable.
