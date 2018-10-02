@@ -23,55 +23,45 @@ MPI_Request bottomRcv;
 MPI_Request leftRcv;
 MPI_Request rightRcv;
 
-int getFileSize(int width, int height, int isRGB) {
-    if (isRGB) {
-        return 3 * width * height;
-    } else {
-        return width * height;
-    }
-}
-
 int fileMemAllocSize(int rows, int columns, int isRGB) {
     if (isRGB) {
-        return (rows + 2) * (columns*3 + 6);
+        return (rows + 2) * (columns + 2) * 3;
     } else {
         return (rows + 2) * (columns + 2);
     }
 }
 
-void broadcastInfo(int* isRGB, int* width, int* height, int* iterations, int* splitRowNum, int* splitColNum, int* comm_size_sqrt_int) {
-    MPI_Bcast(isRGB, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(width, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(height, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(iterations, 1, MPI_INT, 0, MPI_COMM_WORLD);
+void broadcastInfo(int* splitRowNum, int* splitColNum, int* comm_size_sqrt_int) {
     MPI_Bcast(splitRowNum, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(splitColNum, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(comm_size_sqrt_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
 int main(int argc, char** argv) {
-	int width, height, loops, t, splitRowNum, splitColNum, rows, cols, comm_size_sqrt_int;
-	char *imageName;
-    int isRGB;
-    int comm_rank, comm_size;
+	  int width, height, loops, t, splitRowNum, splitColNum, rows, cols, comm_size_sqrt_int;
+	  char *imageName;
+    int isRGB,comm_rank, comm_size;
     double comm_size_sqrt;
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);  //size of the group associated with a communicator
+    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);  //rank of the calling process in the communicator
 
+    /* check input arguments */
     if (comm_rank == 0) {
         if (argc != 6) {
             fprintf(stderr, "Bad input provided\n");
-            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);  //terminate all tasks in comm
             exit(EXIT_FAILURE);
         }
-        isRGB = atoi(argv[1]);
-  //why not: imageName = argv[2] ?? #nem
-        imageName = malloc((strlen(argv[2]) + 1) * sizeof(char));
-        strcpy(imageName, argv[2]);
-        width = atoi(argv[3]);
-        height = atoi(argv[4]);
-        loops = atoi(argv[5]);
+    }
+    /*get arguments*/
+    isRGB = atoi(argv[1]);
+    imageName = argv[2];
+    width = atoi(argv[3]);
+    height = atoi(argv[4]);
+    loops = atoi(argv[5]);
+    /*check arguments for compliance*/
+    if(comm_rank == 0) {
         comm_size_sqrt = sqrt(comm_size);
         if ((comm_size_sqrt_int = (int) comm_size_sqrt) != comm_size_sqrt ||
             width % comm_size_sqrt_int != 0 ||
@@ -83,40 +73,43 @@ int main(int argc, char** argv) {
             splitRowNum = comm_size_sqrt_int;
             splitColNum = comm_size_sqrt_int;
         }
-    } else {
-        imageName = malloc((strlen(argv[2])+1) * sizeof(char));
-        strcpy(imageName, argv[2]);
     }
-    broadcastInfo(&isRGB, &width, &height, &loops, &splitRowNum, &splitColNum, &comm_size_sqrt_int);
+    printf("arg %s %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4], argv[5]);
+    printf("int %d %s %d %d %d\n", isRGB, imageName, width, height, loops );
+
+    //broadcast info from the rank=0 process to all other
+    broadcastInfo(&splitRowNum, &splitColNum, &comm_size_sqrt_int);
 
     rows = height / splitRowNum;
     cols = width / splitColNum;
 
     MPI_Type_contiguous(cols, MPI_BYTE, &rowGrey);
-	MPI_Type_commit(&rowGrey);
-	MPI_Type_contiguous(3*cols, MPI_BYTE, &rowRGB);
-	MPI_Type_commit(&rowRGB);
-	MPI_Type_vector(rows, 1, cols+2, MPI_BYTE, &colGrey);
-	MPI_Type_commit(&colGrey);
-	MPI_Type_vector(rows, 3, 3*cols+6, MPI_BYTE, &colRGB);
-	MPI_Type_commit(&colRGB);
+  	MPI_Type_commit(&rowGrey);
+  	MPI_Type_contiguous(3*cols, MPI_BYTE, &rowRGB);
+  	MPI_Type_commit(&rowRGB);
+  	MPI_Type_vector(rows, 1, cols+2, MPI_BYTE, &colGrey);
+  	MPI_Type_commit(&colGrey);
+  	MPI_Type_vector(rows, 3, 3*cols+6, MPI_BYTE, &colRGB);
+  	MPI_Type_commit(&colRGB);
 
+    //calculate the starting row/col
     int start_row = (comm_rank / comm_size_sqrt_int) * rows;
     int start_col = (comm_rank % comm_size_sqrt_int) * cols;
 
+  //allocate space for the file
 	unsigned char* source = NULL;
-    unsigned char* dest = NULL;
+  unsigned char* dest = NULL;
 	MPI_File mpi_file;
-	int filesize = getFileSize(width, height, isRGB);
-	source = calloc(fileMemAllocSize(rows, cols, isRGB), sizeof(unsigned char));
-	dest = calloc(fileMemAllocSize(rows, cols, isRGB), sizeof(unsigned char));
+	int filesize = fileMemAllocSize(rows, cols, isRGB);
+	source = calloc(filesize, sizeof(unsigned char));
+	dest = calloc(filesize, sizeof(unsigned char));
 	if (source == NULL || dest == NULL) {
-        fprintf(stderr, "%s: Not enough memory\n", argv[0]);
+        fprintf(stderr, "%s: Failed to allocate memory\n", argv[0]);
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         return EXIT_FAILURE;
 	}
 
-	// Parallel read
+	// Parallel read the file to the source array
 	MPI_File_open(MPI_COMM_WORLD, imageName, MPI_MODE_RDONLY, MPI_INFO_NULL, &mpi_file);
 	if (isRGB) {
         int i;
@@ -133,31 +126,32 @@ int main(int argc, char** argv) {
 	}
 	MPI_File_close(&mpi_file);
 
+  //find neighbor blocks
     int top, bottom, left, right;
     if (start_row != 0) {
         top = comm_rank - splitColNum;
-    } else {  //first block
+    } else {  //first line blocks have no top
         top = -1;
     }
     if (start_row + rows != height) {
         bottom = comm_rank + splitColNum;
-    } else {  //last block
+    } else {  //last line blocks have no bottom
         bottom = -1;
     }
     if (start_col != 0) {
         left = comm_rank - 1;
-    } else {
+    } else { //left column blocks have no left
         left = -1;
     }
     if (start_col + cols != width) {
         right = comm_rank + 1;
-    } else {
+    } else {  //right column blocks have no right
         right = -1;
     }
 
 	MPI_Barrier(MPI_COMM_WORLD); //block until all processes reach this routine
 
-    double startTime = MPI_Wtime();
+  double startTime = MPI_Wtime();
 	// Convolute "loops" times
 	for (t = 0 ; t < loops ; t++) {
         /* Send and request borders */
