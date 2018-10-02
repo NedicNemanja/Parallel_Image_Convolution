@@ -182,12 +182,12 @@ int main(int argc, char** argv) {
 				MPI_Irecv(&source[(rows+1)*(cols+2)+1], 1, rowGrey, bottom, 0, MPI_COMM_WORLD, &bottomRcv);
 			}
             if (left != -1) { //not leftmost block
-                MPI_Isend(&source[cols+2 + 1], 1, colRGB, left, 0, MPI_COMM_WORLD, &leftSend);
-                MPI_Irecv(&source[cols+2], 1, colRGB, left, 0, MPI_COMM_WORLD, &leftRcv);
+                MPI_Isend(&source[cols+2 + 1], 1, colGrey, left, 0, MPI_COMM_WORLD, &leftSend);
+                MPI_Irecv(&source[cols+2], 1, colGrey, left, 0, MPI_COMM_WORLD, &leftRcv);
             }
             if (right != -1) { //not rightmost block
-                MPI_Isend(&source[cols+2 + cols], 1, colRGB, right, 0, MPI_COMM_WORLD, &rightSend);
-                MPI_Irecv(&source[cols+2 + cols+1], 1, colRGB, right, 0, MPI_COMM_WORLD, &rightRcv);
+                MPI_Isend(&source[cols+2 + cols], 1, colGrey, right, 0, MPI_COMM_WORLD, &rightSend);
+                MPI_Irecv(&source[cols+2 + cols+1], 1, colGrey, right, 0, MPI_COMM_WORLD, &rightRcv);
             }
 		}
 
