@@ -4,6 +4,7 @@
 #include "mpi.h"
 #include "filter.h"
 
+//#nem why floats and not ints?
 const float blurFilter[3][3] = {{1/16.0, 2/16.0, 1/16.0}, {2/16.0, 4/16.0, 2/16.0}, {1/16.0, 2/16.0, 1/16.0}};
 
 void blur(unsigned char* source, unsigned char* dest, int startRow, int endRow, int startCol, int endCol, int width, int height, int isRGB) {

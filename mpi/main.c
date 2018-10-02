@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     int comm_rank, comm_size;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);	
+    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
 
     if (comm_rank == 0) {
         if (argc != 6) {
@@ -56,6 +56,7 @@ int main(int argc, char** argv) {
             exit(EXIT_FAILURE);
         }
         isRGB = atoi(argv[1]);
+  //why not: imageName = argv[2] ?? #nem
         imageName = malloc((strlen(argv[2]) + 1) * sizeof(char));
         strcpy(imageName, argv[2]);
         width = atoi(argv[3]);
@@ -73,7 +74,7 @@ int main(int argc, char** argv) {
         strcpy(imageName, argv[2]);
     }
     broadcastInfo(&isRGB, &width, &height, &loops, &splitRowNum);
-	
+
     rows = height / splitRowNum;
     cols = width;
 
@@ -119,36 +120,36 @@ int main(int argc, char** argv) {
     int top, bottom;
     if (start_row != 0) {
         top = comm_rank - 1;
-    } else {
+    } else {  //first block
         top = -1;
     }
     if (start_row + rows != height) {
         bottom = comm_rank + 1;
-    } else {
+    } else {  //last block
         bottom = -1;
     }
-	
-	MPI_Barrier(MPI_COMM_WORLD);
+
+	MPI_Barrier(MPI_COMM_WORLD); //block until all processes reach this routine
 
     double startTime = MPI_Wtime();
 	/* Convolute "loops" times */
 	for (t = 0 ; t < loops ; t++) {
         /* Send and request borders */
 		if (isRGB) {
-			if (top != -1) {
+			if (top != -1) { //not first block
 				MPI_Isend(&source[3*cols+6 + 1], 1, rowRGB, top, 0, MPI_COMM_WORLD, &topSend);
 				MPI_Irecv(&source[3], 1, rowRGB, top, 0, MPI_COMM_WORLD, &topRcv);
 			}
-			if (bottom != -1) {
+			if (bottom != -1) {  //not last block
 				MPI_Isend(&source[rows*(3*cols+6)], 1, rowRGB, bottom, 0, MPI_COMM_WORLD, &bottomSend);
 				MPI_Irecv(&source[(rows+1)*(3*cols+6)], 1, rowRGB, bottom, 0, MPI_COMM_WORLD, &bottomRcv);
 			}
 		} else {
-            if (top != -1) {
+      if (top != -1) {  //not first block
 				MPI_Isend(&source[cols+3], 1, rowGrey, top, 0, MPI_COMM_WORLD, &topSend);
 				MPI_Irecv(&source[1], 1, rowGrey, top, 0, MPI_COMM_WORLD, &topRcv);
 			}
-			if (bottom != -1) {
+			if (bottom != -1) { //not last block
 				MPI_Isend(&source[rows*(cols+2) + 1], 1, rowGrey, bottom, 0, MPI_COMM_WORLD, &bottomSend);
 				MPI_Irecv(&source[(rows+1)*(cols+2)+1], 1, rowGrey, bottom, 0, MPI_COMM_WORLD, &bottomRcv);
 			}
@@ -170,16 +171,18 @@ int main(int argc, char** argv) {
 		if (bottom != -1)
 			MPI_Wait(&bottomSend, &status);
 
-        unsigned char* temp;
+    unsigned char* temp;
 		temp = source;
-        source = dest;
-        dest = temp;
+    source = dest;
+    dest = temp;
 	}
     double totalTime = MPI_Wtime() - startTime;
 
 	char *outimageName = malloc(12 * sizeof(char));
 	strcpy(outimageName, "blurred.raw");
 	MPI_File outFile;
+	//#nem why not:
+	//MPI_File_open(MPI_COMM_WORLD, "blurred.raw", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
 	MPI_File_open(MPI_COMM_WORLD, outimageName, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
 	if (isRGB) {
         int i;
