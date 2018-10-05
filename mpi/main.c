@@ -307,36 +307,44 @@ int main(int argc, char** argv) {
 	}
   double totalTime = MPI_Wtime() - startTime;
 
+  //Write the convoluted block to a new file
 	MPI_File outFile;
-	MPI_File_open(MPI_COMM_WORLD, "blurred.raw", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
+	MPI_File_open(MPI_COMM_WORLD, "blurred.raw",
+                MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
 	if (isRGB) {
     int i;
 		for (i = 1 ; i <= rows ; i++) {
-			MPI_File_seek(outFile, 3*(start_row + i-1) * width + 3*start_col, MPI_SEEK_SET);
-			MPI_File_write(outFile, &source[(cols*3+6)*i + 3], cols*3, MPI_BYTE, MPI_STATUS_IGNORE);
+			MPI_File_seek(outFile, 3*(start_row + i-1) * width + 3*start_col,
+                    MPI_SEEK_SET);
+			MPI_File_write( outFile, &source[(cols*3+6)*i + 3], cols*3, MPI_BYTE,
+                      MPI_STATUS_IGNORE);
 		}
 	} else {
-        int i;
-        for (i = 1 ; i <= rows ; i++) {
+    int i;
+    for (i = 1 ; i <= rows ; i++) {
 			MPI_File_seek(outFile, (start_row + i-1) * width + start_col, MPI_SEEK_SET);
 			MPI_File_write(outFile, &source[(cols+2)*i + 1], cols, MPI_BYTE, MPI_STATUS_IGNORE);
 		}
 	}
 	MPI_File_close(&outFile);
 
-    if (comm_rank != 0)
-        MPI_Send(&totalTime, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-    else {
-        double commPassedTime;
-        int i;
-        for (i = 1 ; i != comm_size ; i++) {
-            MPI_Recv(&commPassedTime, 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
-            if (commPassedTime > totalTime)
-                totalTime = commPassedTime;
-        }
-        printf("Max process passed time: %f\n", totalTime);
-    }
+  //Processes send their times to the master process and the max time is printed
+  if (comm_rank != 0)
+      MPI_Send(&totalTime, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+  else {
+      double commPassedTime;
+      int i;
+      for (i = 1 ; i != comm_size ; i++) {
+        MPI_Recv(&commPassedTime, 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
+        if (commPassedTime > totalTime)
+          totalTime = commPassedTime;
+      }
+      printf("Max process passed time: %f\n", totalTime);
+  }
 
-    MPI_Finalize();
+  //Terminate the enviroment and exit
+  MPI_Finalize();
+  free(source);
+  free(dest);
 	return EXIT_SUCCESS;
 }
