@@ -218,8 +218,6 @@ int main(int argc, char** argv) {
         if(top_left != -1) {  //top left corner
           MPI_Isend(&source[cols+2+1], 1, MPI_BYTE, top_left, 0, MPI_COMM_WORLD, &top_leftSend);
           MPI_Irecv(&source[0], 1, MPI_BYTE, top_left, 0, MPI_COMM_WORLD, &top_leftRcv);
-                printf("%d: %d\n", comm_rank, (int)source[cols+2+1]);
-
         }
         if(top_right != -1){  //top right corner
           MPI_Isend(&source[cols+2+cols], 1, MPI_BYTE, top_right, 0, MPI_COMM_WORLD, &top_rightSend);
@@ -272,35 +270,16 @@ int main(int argc, char** argv) {
     }
     if(top_right != -1) {
       MPI_Wait(&top_rightRcv, &status);
-      blur(source, dest, 1, 1, cols+1, cols+1, cols, rows, isRGB);
+      blur(source, dest, 1, 1, cols, cols, cols, rows, isRGB);
     }
     if(bot_left != -1) {
       MPI_Wait(&bot_leftRcv, &status);
-      blur(source, dest, rows+1, rows+1, 1, 1, cols, rows, isRGB);
+      blur(source, dest, rows, rows, 1, 1, cols, rows, isRGB);
     }
     if(bot_right != -1) {
-         printf("%d: %d\n", comm_rank, (int)source[(rows+1)*(cols+2)+cols+1]);
-
       MPI_Wait(&bot_rightRcv, &status);
-   printf("%d: %d\n", comm_rank, (int)source[(rows+1)*(cols+2)+cols+1]);
-
-      blur(source, dest, rows+1, rows+1, cols+1, cols+1, cols, rows, isRGB);
+      blur(source, dest, rows, rows, cols, cols, cols, rows, isRGB);
     }
-    printf("---%d----\n", comm_rank);
-
-    //Convolute corner pixels (MAYBE WAIT HERE FOR CORNERS)
-		if (top != -1 && left != -1) {
-		    blur(source, dest, 1, 1, 1, 1, cols, rows, isRGB);
-		}
-		if (top != -1 && right != -1) {
-		    blur(source, dest, 1, 1, cols, cols, cols, rows, isRGB);
-		}
-		if (bottom != -1 && left != -1) {
-		    blur(source, dest, rows, rows, 1, 1, cols, rows, isRGB);
-		}
-		if (bottom != -1 && right != -1) {
-		    blur(source, dest, rows, rows, cols, cols, cols, rows, isRGB);
-		}
 
     unsigned char* temp;
     temp = source;
@@ -308,30 +287,30 @@ int main(int argc, char** argv) {
     dest = temp;
 
     //wait until you sent all borders
-		if (top != -1) {
+		if (top != -1)
       MPI_Wait(&topSend, &status);
-    }
-		if (bottom != -1) {
+		if (bottom != -1)
       MPI_Wait(&bottomSend, &status);
-    }
-		if (left != -1) {
+		if (left != -1)
       MPI_Wait(&leftSend, &status);
-    }
-    if (right != -1) {
+    if (right != -1)
       MPI_Wait(&rightSend, &status);
-    }
+    if(top_left != -1)
+      MPI_Wait(&top_leftSend, &status);
+    if(top_right != -1)
+      MPI_Wait(&top_rightSend, &status);
+    if(bot_left != -1)
+      MPI_Wait(&bot_leftSend, &status);
+    if(bot_right != -1)
+      MPI_Wait(&bot_rightSend, &status);
 
 	}
-    double totalTime = MPI_Wtime() - startTime;
+  double totalTime = MPI_Wtime() - startTime;
 
-	char *outimageName = malloc(12 * sizeof(char));
-	strcpy(outimageName, "blurred.raw");
 	MPI_File outFile;
-	//#nem why not:
-	//MPI_File_open(MPI_COMM_WORLD, "blurred.raw", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
-	MPI_File_open(MPI_COMM_WORLD, outimageName, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
+	MPI_File_open(MPI_COMM_WORLD, "blurred.raw", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &outFile);
 	if (isRGB) {
-        int i;
+    int i;
 		for (i = 1 ; i <= rows ; i++) {
 			MPI_File_seek(outFile, 3*(start_row + i-1) * width + 3*start_col, MPI_SEEK_SET);
 			MPI_File_write(outFile, &source[(cols*3+6)*i + 3], cols*3, MPI_BYTE, MPI_STATUS_IGNORE);
