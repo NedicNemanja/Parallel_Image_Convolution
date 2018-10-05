@@ -187,7 +187,7 @@ int main(int argc, char** argv) {
         }
         if(top_right != -1){
           MPI_Isend(&source[3*(cols+2+cols)], 1, RGB_PIXEL, top_right, 0, MPI_COMM_WORLD, &top_rightSend);
-          MPI_Irecv(&source[3*(cols+1)], 1, RGB_PIXEL, top_right, 0, MPI_COMM_WORLD, &top_leftRcv);
+          MPI_Irecv(&source[3*(cols+1)], 1, RGB_PIXEL, top_right, 0, MPI_COMM_WORLD, &top_rightRcv);
         }
 			}
 			if (bottom != -1) {  //bottom border
@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
         }
         if(top_right != -1){  //top right corner
           MPI_Isend(&source[cols+2+cols], 1, MPI_BYTE, top_right, 0, MPI_COMM_WORLD, &top_rightSend);
-          MPI_Irecv(&source[cols+1], 1, MPI_BYTE, top_right, 0, MPI_COMM_WORLD, &top_leftRcv);
+          MPI_Irecv(&source[cols+1], 1, MPI_BYTE, top_right, 0, MPI_COMM_WORLD, &top_rightRcv);
         }
 			}
 			if (bottom != -1) { //bottom border
@@ -230,11 +230,12 @@ int main(int argc, char** argv) {
         if(bot_left != -1){ //bottom left corner
           MPI_Isend(&source[rows*(cols+2) + 1], 1, MPI_BYTE, bot_left, 0, MPI_COMM_WORLD, &bot_leftSend);
           MPI_Irecv(&source[(rows+1)*(cols+2)], 1, MPI_BYTE, bot_left, 0, MPI_COMM_WORLD, &bot_leftRcv);
+                    printf("%d: %d\n", comm_rank, (int)source[rows*(cols+2)+1]);
+
         }
         if(bot_right != -1){ //bottom right corner
           MPI_Isend(&source[rows*(cols+2)+cols], 1, MPI_BYTE, bot_right, 0, MPI_COMM_WORLD, &bot_rightSend);
           MPI_Irecv(&source[(rows+1)*(cols+2)+cols+1], 1, MPI_BYTE, bot_right, 0, MPI_COMM_WORLD, &bot_rightRcv);
-          printf("%d: %d\n", comm_rank, (int)source[rows*(cols+2)+cols]);
         }
 			}
       if (left != -1) { //left border
@@ -266,11 +267,24 @@ int main(int argc, char** argv) {
       blur(source, dest, 2, rows-1, cols, cols, cols, rows, isRGB);
 		}
     if(top_left != -1) {
-      printf("%d: %d\n", comm_rank, (int)source[0]);
       MPI_Wait(&top_leftRcv, &status);
-            printf("%d: %d\n", comm_rank, (int)source[0]);
-
       blur(source, dest, 1, 1, 1, 1, cols, rows, isRGB);
+    }
+    if(top_right != -1) {
+   printf("%d: %d\n", comm_rank, (int)source[1+cols]);
+
+      MPI_Wait(&top_rightRcv, &status);
+    printf("%d: %d\n", comm_rank, (int)source[1+cols]);
+
+      blur(source, dest, 1, 1, cols+1, cols+1, cols, rows, isRGB);
+    }
+    if(bot_left != -1) {
+      MPI_Wait(&bot_leftRcv, &status);
+      blur(source, dest, rows+1, rows+1, 1, 1, cols, rows, isRGB);
+    }
+    if(bot_right != -1) {
+      MPI_Wait(&bot_rightRcv, &status);
+      blur(source, dest, rows+1, rows+1, cols+1, cols+1, cols, rows, isRGB);
     }
     printf("---%d----\n", comm_rank);
 
