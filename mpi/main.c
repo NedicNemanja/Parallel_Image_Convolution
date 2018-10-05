@@ -10,6 +10,7 @@
 MPI_Status status;
 
 //contiguous datatypes for communicating border rows & cols
+MPI_Datatype RGB_PIXEL; //3*MPI_BYTE
 MPI_Datatype rowGrey;
 MPI_Datatype rowRGB;
 MPI_Datatype colGrey;
@@ -20,10 +21,18 @@ MPI_Request topSend;
 MPI_Request bottomSend;
 MPI_Request leftSend;
 MPI_Request rightSend;
+MPI_Request top_leftSend;
+MPI_Request top_rightSend;
+MPI_Request bot_leftSend;
+MPI_Request bot_rightSend;
 MPI_Request topRcv;
 MPI_Request bottomRcv;
 MPI_Request leftRcv;
 MPI_Request rightRcv;
+MPI_Request top_leftRcv;
+MPI_Request top_rightRcv;
+MPI_Request bot_leftRcv;
+MPI_Request bot_rightRcv;
 
 int fileMemAllocSize(int rows, int columns, int isRGB) {
     if (isRGB) {
@@ -91,6 +100,8 @@ int main(int argc, char** argv) {
           of the existing one. This is useful to simplify the processes of
           sending a number of datatypes together as you don't need to keep track
           of their combined size.*/
+  MPI_Type_contiguous(3, MPI_BYTE, &RGB_PIXEL);
+  MPI_Type_commit(&RGB_PIXEL);
   MPI_Type_contiguous(cols, MPI_BYTE, &rowGrey);
   MPI_Type_commit(&rowGrey);
   MPI_Type_contiguous(3*cols, MPI_BYTE, &rowRGB);
@@ -156,9 +167,9 @@ int main(int argc, char** argv) {
   if(top != -1 && right != -1)
     top_right = top + 1;
   if(bottom != -1 && left !=- 1)
-    bot_left = bot - 1;
+    bot_left = bottom - 1;
   if(bottom != -1 && right != -1)
-    bot_right = bot + 1;
+    bot_right = bottom + 1;
 
 	MPI_Barrier(MPI_COMM_WORLD); //block until all processes know their neighbor
 
@@ -170,10 +181,27 @@ int main(int argc, char** argv) {
 			if (top != -1) { //top border
 				MPI_Isend(&source[3*(cols+2 + 1)], 1, rowRGB, top, 0, MPI_COMM_WORLD, &topSend);
 				MPI_Irecv(&source[3], 1, rowRGB, top, 0, MPI_COMM_WORLD, &topRcv);
+        if(top_left != -1) {
+          MPI_Isend(&source[3*(cols+2+1)], 1, RGB_PIXEL, top_left, 0, MPI_COMM_WORLD, &top_leftSend);
+          MPI_Irecv(&source[0], 1, RGB_PIXEL, top_left, 0, MPI_COMM_WORLD, &top_leftRcv);
+        }
+        if(top_right != -1){
+          MPI_Isend(&source[3*(cols+2+cols)], 1, RGB_PIXEL, top_right, 0, MPI_COMM_WORLD, &top_rightSend);
+          MPI_Irecv(&source[3*(cols+1)], 1, RGB_PIXEL, top_right, 0, MPI_COMM_WORLD, &top_leftRcv);
+        }
 			}
 			if (bottom != -1) {  //bottom border
-				MPI_Isend(&source[(rows*(cols+2) + 1)*3], 1, rowRGB, bottom, 0, MPI_COMM_WORLD, &bottomSend);
+				MPI_Isend(&source[3*(rows*(cols+2) + 1)], 1, rowRGB, bottom, 0, MPI_COMM_WORLD, &bottomSend);
 				MPI_Irecv(&source[(rows+1)*(3*cols+6) + 3], 1, rowRGB, bottom, 0, MPI_COMM_WORLD, &bottomRcv);
+        if(bot_left != -1){ //bottom left corner
+          MPI_Isend(&source[3*(rows*(cols+2) + 1)], 1, RGB_PIXEL, bot_left, 0, MPI_COMM_WORLD, &bot_leftSend);
+          MPI_Irecv(&source[3*((rows+1)*(cols+2))], 1, RGB_PIXEL, bot_left, 0, MPI_COMM_WORLD, &bot_leftRcv);
+        }
+        if(bot_right != -1){ //bottom right corner
+          MPI_Isend(&source[3*(rows*(cols+2)+cols)], 1, RGB_PIXEL, bot_right, 0, MPI_COMM_WORLD, &bot_rightSend);
+          MPI_Irecv(&source[3*((rows+1)*(cols+2)+cols+1)], 1, RGB_PIXEL, bot_right, 0, MPI_COMM_WORLD, &bot_rightRcv);
+        }
+
 			}
 			if (left != -1) { //left border
         MPI_Isend(&source[3*cols+6 + 3], 1, colRGB, left, 0, MPI_COMM_WORLD, &leftSend);
@@ -187,10 +215,27 @@ int main(int argc, char** argv) {
       if (top != -1) {  //top border
 				MPI_Isend(&source[cols+2 + 1], 1, rowGrey, top, 0, MPI_COMM_WORLD, &topSend);
 				MPI_Irecv(&source[1], 1, rowGrey, top, 0, MPI_COMM_WORLD, &topRcv);
+        if(top_left != -1) {  //top left corner
+          MPI_Isend(&source[cols+2+1], 1, MPI_BYTE, top_left, 0, MPI_COMM_WORLD, &top_leftSend);
+          MPI_Irecv(&source[0], 1, MPI_BYTE, top_left, 0, MPI_COMM_WORLD, &top_leftRcv);
+        }
+        if(top_right != -1){  //top right corner
+          MPI_Isend(&source[cols+2+cols], 1, MPI_BYTE, top_right, 0, MPI_COMM_WORLD, &top_rightSend);
+          MPI_Irecv(&source[cols+1], 1, MPI_BYTE, top_right, 0, MPI_COMM_WORLD, &top_leftRcv);
+        }
 			}
 			if (bottom != -1) { //bottom border
 				MPI_Isend(&source[rows*(cols+2) + 1], 1, rowGrey, bottom, 0, MPI_COMM_WORLD, &bottomSend);
 				MPI_Irecv(&source[(rows+1)*(cols+2)+1], 1, rowGrey, bottom, 0, MPI_COMM_WORLD, &bottomRcv);
+        if(bot_left != -1){ //bottom left corner
+          MPI_Isend(&source[rows*(cols+2) + 1], 1, MPI_BYTE, bot_left, 0, MPI_COMM_WORLD, &bot_leftSend);
+          MPI_Irecv(&source[(rows+1)*(cols+2)], 1, MPI_BYTE, bot_left, 0, MPI_COMM_WORLD, &bot_leftRcv);
+        }
+        if(bot_right != -1){ //bottom right corner
+          MPI_Isend(&source[rows*(cols+2)+cols], 1, MPI_BYTE, bot_right, 0, MPI_COMM_WORLD, &bot_rightSend);
+          MPI_Irecv(&source[(rows+1)*(cols+2)+cols+1], 1, MPI_BYTE, bot_right, 0, MPI_COMM_WORLD, &bot_rightRcv);
+          printf("%d: %d\n", comm_rank, (int)source[rows*(cols+2)+cols]);
+        }
 			}
       if (left != -1) { //left border
         MPI_Isend(&source[cols+2 + 1], 1, colGrey, left, 0, MPI_COMM_WORLD, &leftSend);
@@ -201,12 +246,11 @@ int main(int argc, char** argv) {
         MPI_Irecv(&source[cols+2 + cols+1], 1, colGrey, right, 0, MPI_COMM_WORLD, &rightRcv);
       }
 		}
-
-    //Covolute internal pixels (not the border ones!)
-		blur(source, dest, 1, rows, 1, cols, cols, rows, isRGB);
-    //Wait to receive and convolute border pixels
+    /*Covolute internal pixels (the ones that dont depend on the border)*/
+		blur(source, dest, 2, rows-1, 2, cols-1, cols, rows, isRGB);
+    /*Wait to receive and convolute border-dependent pixels*/
 		if (top != -1) {
-			MPI_Wait(&topRcv, &status);
+      MPI_Wait(&topRcv, &status);
 			blur(source, dest, 1, 1, 2, cols-1, cols, rows, isRGB);
 		}
 		if (bottom != -1) {
@@ -221,6 +265,14 @@ int main(int argc, char** argv) {
 		  MPI_Wait(&rightRcv, &status);
       blur(source, dest, 2, rows-1, cols, cols, cols, rows, isRGB);
 		}
+    if(top_left != -1) {
+      printf("%d: %d\n", comm_rank, (int)source[0]);
+      MPI_Wait(&top_leftRcv, &status);
+            printf("%d: %d\n", comm_rank, (int)source[0]);
+
+      blur(source, dest, 1, 1, 1, 1, cols, rows, isRGB);
+    }
+    printf("---%d----\n", comm_rank);
 
     //Convolute corner pixels (MAYBE WAIT HERE FOR CORNERS)
 		if (top != -1 && left != -1) {
