@@ -286,6 +286,13 @@ int main(int argc, char** argv) {
     source = dest;
     dest = temp;
 
+    //checksum
+    if( prev_checksum == new_checksum)
+      printf("Filter failed. Image checksum did not change.\n"
+              "%Le vs %Le\n", prev_checksum, new_checksum);
+    prev_checksum = new_checksum;
+    new_checksum = 0;
+
     //wait until you sent all borders
 		if (top != -1)
       MPI_Wait(&topSend, &status);

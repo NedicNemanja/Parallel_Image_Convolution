@@ -4,6 +4,9 @@
 #include "mpi.h"
 #include "filter.h"
 
+//each process has its own checksum
+long double prev_checksum = 0, new_checksum = 0;
+
 //Normalized filter for blurring
 const float blurFilter[3][3] = {{1/16.0, 2/16.0, 1/16.0}, {2/16.0, 4/16.0, 2/16.0}, {1/16.0, 2/16.0, 1/16.0}};
 
@@ -40,6 +43,7 @@ void blurGrey(unsigned char* source, unsigned char* dest, int x, int y, int widt
     p++;
   }
 	dest[width * x + y] = cell;	//commit the result
+	new_checksum += cell;
 }
 
 /*Blur a 3x3 block around the selected pixel for every color separately.*/
@@ -60,4 +64,5 @@ void blurRGB(unsigned char* source, unsigned char* dest, int x, int y, int width
 	dest[width * x + y] = red;
 	dest[width * x + y+1] = green;
 	dest[width * x + y+2] = blue;
+	new_checksum += red+green+blue;
 }
