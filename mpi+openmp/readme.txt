@@ -1,4 +1,4 @@
-compile using mpicc -o main main.c filter.h filter.c -lm
+compile using mpicc -fopenmp -o main main.c filter.h filter.c
 
 run using mpirun -np ./main [processors_num] [isRGB] [image_relative_path] [width] [height] [iterations]
 

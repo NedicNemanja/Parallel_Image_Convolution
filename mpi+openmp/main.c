@@ -3,7 +3,6 @@
 #include <string.h>
 #include <fcntl.h>
 #include <stdint.h>
-#include <math.h>
 #include <mpi.h>
 #include <omp.h>
 #include "filter.h"
@@ -43,58 +42,74 @@ int fileMemAllocSize(int rows, int columns, int isRGB) {
     }
 }
 
-void broadcastInfo(int* splitRowNum, int* splitColNum, int* comm_size_sqrt_int) {
+void broadcastInfo(int* splitRowNum, int* splitColNum) {
     MPI_Bcast(splitRowNum, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(splitColNum, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(comm_size_sqrt_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
+}
+
+void OptimizeCommPerimeter(int num_proc, int width, int height,int* splitColNum,
+  int* splitRowNum) {
+  unsigned int  min_perimeter = width*height*4, rows, block_width, block_height,
+                comm_perimeter,total_grid_perimeter;
+  for(int col=1; col<=num_proc; col++){
+    if( num_proc % col == 0){
+      rows = num_proc / col;
+      block_width = width / col;
+      block_height = height/rows;
+      total_grid_perimeter = num_proc*(2*block_height+2*block_width);
+      comm_perimeter = total_grid_perimeter - (2*height+2*width);
+      if( comm_perimeter < min_perimeter){
+        *splitColNum = col;
+        *splitRowNum = rows;
+        min_perimeter = comm_perimeter;
+      }
+    }
+  }
+  printf("Optimum Perimeter (Communication overhead): %d\n", min_perimeter);
 }
 
 int main(int argc, char** argv) {
-	  int width, height, loops, t, splitRowNum, splitColNum, rows, cols, comm_size_sqrt_int;
-	  char *imageName;
-    int isRGB,comm_rank, comm_size;
-    double comm_size_sqrt;
-    //Init MPI enviroment and share arguments between processes
-    MPI_Init(&argc, &argv);
-    //size of the group associated with a communicator
-    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-    //rank of the calling process in the communicator
-    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+  int width, height, loops, t, splitRowNum, splitColNum, rows, cols;
+	char *imageName;
+  int isRGB,comm_rank, comm_size;
+  //Init MPI enviroment and share arguments between processes
+  MPI_Init(&argc, &argv);
+  //size of the group associated with a communicator
+  MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+  //rank of the calling process in the communicator
+  MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
 
-    /* check input arguments */
-    if (comm_rank == 0) {
-        if (argc != 6) {
-            fprintf(stderr, "Bad input provided\n");
-            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);  //end all tasks in comm
-            exit(EXIT_FAILURE);
-        }
+  /* check input arguments */
+  if (comm_rank == 0) {
+    if (argc != 6) {
+      fprintf(stderr, "Bad input provided\n");
+      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);  //end all tasks in comm
+      exit(EXIT_FAILURE);
     }
-    /*get arguments*/
-    isRGB = atoi(argv[1]);
-    imageName = argv[2];
-    width = atoi(argv[3]);
-    height = atoi(argv[4]);
-    loops = atoi(argv[5]);
-    /*check arguments for compliance (only process 0 does this)*/
-    if(comm_rank == 0) {
-      comm_size_sqrt = sqrt(comm_size);
-      if ((comm_size_sqrt_int = (int) comm_size_sqrt) != comm_size_sqrt ||
-        width % comm_size_sqrt_int != 0 ||
-        height % comm_size_sqrt_int != 0) {
-        fprintf(stderr, "Bad config provided\n");
-        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-        exit(EXIT_FAILURE);
-      } else {
-        splitRowNum = comm_size_sqrt_int;
-        splitColNum = comm_size_sqrt_int;
-      }
+  }
+  /*get arguments*/
+  isRGB = atoi(argv[1]);
+  imageName = argv[2];
+  width = atoi(argv[3]);
+  height = atoi(argv[4]);
+  loops = atoi(argv[5]);
+  /*Find the best way to partition the image*/
+  if(comm_rank == 0) {
+    OptimizeCommPerimeter(comm_size,width,height,&splitColNum,&splitRowNum);
+    if ( width % splitColNum || height % splitRowNum) {
+      fprintf(stderr, "Can't divide. Try different process_num.\n");
+      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+      exit(EXIT_FAILURE);
     }
-
-  //broadcast info from the rank=0 process to all other(MAY BE UNNECESSARY-overhead?)
-  broadcastInfo(&splitRowNum, &splitColNum, &comm_size_sqrt_int);
-
+    printf("Splliting %dx rows, %dx cols\n", splitRowNum, splitColNum);
+  }
+  //broadcast info from the rank=0 process to others
+  broadcastInfo(&splitRowNum, &splitColNum);
+  //rows and cols per process
   rows = height / splitRowNum;
   cols = width / splitColNum;
+  if( comm_rank == 0)
+    printf("Block dimensions: %dx%d\n", cols, rows);
 
   //Create contiguous types for rows & cols
   /*note: MPI_Type_contiguous is for making a new datatype which is count copies
@@ -115,8 +130,8 @@ int main(int argc, char** argv) {
   MPI_Type_commit(&colRGB);
 
   //calculate the starting row/col
-  int start_row = (comm_rank / comm_size_sqrt_int) * rows;
-  int start_col = (comm_rank % comm_size_sqrt_int) * cols;
+  int start_row = (comm_rank / splitColNum) * rows;
+  int start_col = (comm_rank % splitColNum) * cols;
 
   /*Allocate space for the arrays but with a 1pixel border around them:
     source: the array which we read from
@@ -172,8 +187,6 @@ int main(int argc, char** argv) {
   if(bottom != -1 && right != -1)
     bot_right = bottom + 1;
 
-
-printf("%d %dx%d\n", comm_rank, cols, rows);
 	MPI_Barrier(MPI_COMM_WORLD); //block until all processes know their neighbor
 
   double startTime = MPI_Wtime();
@@ -342,14 +355,20 @@ printf("%d %dx%d\n", comm_rank, cols, rows);
   if (comm_rank != 0)
       MPI_Send(&totalTime, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
   else {
-      double commPassedTime;
+      double* commPassedTimes = malloc(comm_size*sizeof(double));
+      commPassedTimes[0] = totalTime;
       int i;
+      //find max time
       for (i = 1 ; i != comm_size ; i++) {
-        MPI_Recv(&commPassedTime, 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
-        if (commPassedTime > totalTime)
-          totalTime = commPassedTime;
+        MPI_Recv(&commPassedTimes[i], 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
+        if (commPassedTimes[i] > totalTime)
+          totalTime = commPassedTimes[i];
       }
-      printf("Max process passed time: %f\n", totalTime);
+      //calculate idle times
+      for(i=0; i<comm_size; i++){
+        printf("\nproc%d Idle time: %fs\n", i,totalTime-commPassedTimes[i]);
+      }
+      printf("\nMax process passed time: %f\n", totalTime);
   }
 
   //Terminate the enviroment and exit
