@@ -4,7 +4,8 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <math.h>
-#include "mpi.h"
+#include <mpi.h>
+#include <omp.h>
 #include "filter.h"
 
 MPI_Status status;
@@ -171,6 +172,8 @@ int main(int argc, char** argv) {
   if(bottom != -1 && right != -1)
     bot_right = bottom + 1;
 
+
+printf("%d %dx%d\n", comm_rank, cols, rows);
 	MPI_Barrier(MPI_COMM_WORLD); //block until all processes know their neighbor
 
   double startTime = MPI_Wtime();
@@ -288,8 +291,8 @@ int main(int argc, char** argv) {
 
     //checksum
     if( prev_checksum == new_checksum )
-      printf("Filter failed. Image checksum did not change.\n"
-              "%Le vs %Le\n", prev_checksum, new_checksum);
+      fprintf(stderr, "%d Filter failed. Image checksum did not change.\n"
+              "%Le vs %Le\n", comm_rank, prev_checksum, new_checksum);
     prev_checksum = new_checksum;
     new_checksum = 0;
 

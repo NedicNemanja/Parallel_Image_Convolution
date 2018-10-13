@@ -288,7 +288,7 @@ int main(int argc, char** argv) {
 
     //checksum
     if( prev_checksum == new_checksum)
-      printf("Filter failed. Image checksum did not change.\n"
+      fprintf(stderr, "Filter failed. Image checksum did not change.\n"
               "%Le vs %Le\n", prev_checksum, new_checksum);
     prev_checksum = new_checksum;
     new_checksum = 0;

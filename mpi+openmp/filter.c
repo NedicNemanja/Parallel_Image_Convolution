@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "mpi.h"
+#include <mpi.h>
 #include "filter.h"
 #include "omp.h"
 
@@ -17,14 +17,14 @@ void blur(unsigned char* source, unsigned char* dest, int startRow, int endRow, 
 	/*note: the "if" is outside of the loops to increace efficency
 	(don't check the same condition for every loop)*/
   if (isRGB) {
-		#pragma omp parallel for shared(source, dest, new_checksum) schedule(static) collapse(3)
+		#pragma omp parallel for collapse(2)
 		for (i = startRow; i <= endRow; i++) {
 			for (j = startCol; j <= endCol; j++) {
 				blurRGB(source, dest, i, j*3, width*3+6, height);
     	}
   	}
 	} else {
-		#pragma omp parallel for shared(source, dest, new_checksum) schedule(static) collapse(3)
+		#pragma omp parallel for collapse(2)
 		for (i = startRow; i <= endRow; i++) {
 			for (j = startCol; j <= endCol; j++) {
 				blurGrey(source, dest, i, j, width+2, height);
